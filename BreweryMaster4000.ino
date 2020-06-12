@@ -1,37 +1,41 @@
+
 #include <LiquidCrystal_I2C.h>
-#include <Wire.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <Button.h>
+
+#define ONE_WIRE_BUS 8
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
 
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
-const int buttonUpPin = 3;
-const int buttonDownPin = 4;
-const int buttonMenuPin = 5;
+const int relay1Output = 6;
+const int relay2Output = 7;
+const int readTemp = 8;
 
-bool buttonUp = false;
-bool buttonDown = false;
-bool buttonMenu = false;
-
-const int relayOutput = 6;
-const int readTemp = 7;
-
-double setTemp = 17;
-double currentTemp = 0;
-double thermometerCalibration = 0;
-double hysteresis = 0.5;
-double trueTemp;
-double trueSetTemp;
+float setTemp = 30.0;
+float currentTemp = 0.0;
+float thermometerCalibration = 0.0;
+float hysteresis = 1.5;
+float trueTemp;
+float trueSetTemp;
 
 bool checkTemp = false;
+bool heater = false;
+bool cooler = false;
+
 
 unsigned long timerThen = 0;
-unsigned long timerNow = 0;
-unsigned long checkTime = 5.0;
+unsigned long timerSensor = 0;
+unsigned long checkTime = 0.1;
 const long millisToMin = 60000;
 
-const String setTempText = "Temp. zadana:";
-const String thermometerCalibrationText = "Kalibracja:";
-const String hysteresisText = "Histereza:";
-const String checkTimeText = "Czas zwłoki:";
+const String setTempText = "T.zadana: ";
+const String thermometerCalibrationText = "Kalib.:";
+const String hysteresisText = "Hist.:";
+const String checkTimeText = "C.zwloki:";
+const String currentTempText = "Ob.T.: ";
 
 const int setTempPage = 0;
 const int thermometerCalibrationPage = 1;
@@ -42,108 +46,179 @@ const int lastPage = checkTimePage;
 
 int menuPage = 0;
 
+Button menu (2);
+Button down (3);
+Button up (4);
+
 
 void setup() {
 
   lcd.begin(16, 2);
   lcd.clear();
 
+  pinMode (relay1Output, OUTPUT);
+  pinMode (relay2Output, OUTPUT);
+  digitalWrite(relay1Output, HIGH);
+  digitalWrite(relay2Output, HIGH);
+
   Serial.begin(115200);
+
+
+
+  sensors.begin();
+
+
+ 
+  timerThen  = 0;
+  timerSensor = 0;
+  
+  sensors.requestTemperatures();
 }
 
 void loop() {
-  Serial.println();
+
+  trueTemp = (currentTemp + thermometerCalibration) ;
+
+  if (abs(millis() - timerSensor) > 5000) {
+    timerSensor = millis();
+    sensors.requestTemperatures();
+    
+  };
+  
+//  Serial.print("////////////////////////");
+//  Serial.print("\n");
+//  Serial.print("Timer: ");
+//  Serial.print(millis() - timerThen);
+//  Serial.print("\n");
+//  Serial.print("checkTemp: ");
+//  Serial.print(checkTemp);
+//  Serial.print("\n");
+//  Serial.print("////////////////////////");
+  
+  currentTemp = sensors.getTempCByIndex(0);
 
   
-
-  timerNow = millis();
-  trueTemp = currentTemp + thermometerCalibration;
-  trueSetTemp = setTemp + hysteresis;
-
-  if ( trueSetTemp > trueTemp && checkTemp == false ) {
-    timerThen = millis();
+  if (  (abs(millis() - timerThen) > 5000) && checkTemp == false ) {
     checkTemp = true;
-  };
 
+      if (currentTemp  < setTemp - hysteresis){
+      heater = true;
+      cooler = false;
+     }
 
-  if (checkTemp == true && timerNow - timerThen > checkTime * millisToMin) {
+    else if ( (setTemp + hysteresis) < currentTemp ){
+      heater = false;
+      cooler = true;
+     }
 
-    if (trueSetTemp > trueTemp) {
-      while (trueSetTemp > trueTemp) {
-        digitalWrite(relayOutput, LOW);
+     else {
+          checkTemp = false;
+          timerThen = millis();
       };
-      digitalWrite(relayOutput, HIGH);
-      checkTemp = true;
-    } else {
-      checkTemp = true;
-    };
+     
+  };
+     
+
+  if (heater == true && checkTemp == true) {
+    
+    digitalWrite(relay1Output, LOW);
+        if (trueTemp > setTemp ) {
+          checkTemp = false;
+          timerThen = millis();
+          digitalWrite(relay1Output, HIGH);
+          };
+        };
+
+  if (cooler == true && checkTemp == true) {
+    
+    digitalWrite(relay2Output, LOW);
+        if (trueTemp < setTemp ) {
+          checkTemp = false;
+          timerThen = millis();
+          digitalWrite(relay2Output, HIGH);
+          };
+        };
+
+
+
+
+  if (menu.isReleased() == true) {
+    menuPage++;
+    lcd.clear();
   };
 
-
-
-  if (digitalRead(buttonMenu) == LOW){
-    menuPage++;
-    }
   if (menuPage > lastPage) {
     menuPage = 0;
-    }
+  };
 
-buttonUp = debounce(buttonUpPin);
-buttonDown = debounce(buttonDownPin);
-buttonMenu = debounce(buttonMenuPin);
 
-displayMenu(lcd, setTempText, setTemp, menuPage, setTempPage);
-displayMenu(lcd, thermometerCalibrationText, thermometerCalibration, menuPage, thermometerCalibrationPage);
-displayMenu(lcd, hysteresisText, hysteresis, menuPage, hysteresisPage);
-displayMenu(lcd, checkTimeText, checkTime, menuPage, checkTimePage);
+  lcd.setCursor(0, 0);
+  lcd.print(setTempText);
+  lcd.print(setTemp, 1);
+  lcd.print((char)223);
+  lcd.print("C");
 
-setValue (buttonUp, buttonDown, setTemp, menuPage, setTempPage);
-setValue (buttonUp, buttonDown, thermometerCalibration, menuPage, thermometerCalibrationPage);
-setValue (buttonUp, buttonDown, hysteresis, menuPage, hysteresisPage);
-setValue (buttonUp, buttonDown, checkTime, menuPage, checkTimePage);
 
+switch (menuPage) {
   
+  case 0:
+  setTemp = setValue (up.isReleased(), down.isReleased(), setTemp);
+  displayLCD(lcd, currentTempText, currentTemp );
+  displayLCD_C();
+  break;
+
+  case 1:
+  displayLCD(lcd, thermometerCalibrationText, thermometerCalibration );
+  displayLCD_C();
+  thermometerCalibration = setValue (up.isReleased(), down.isReleased(), thermometerCalibration);
+  break;
+
+  case 2:
+  displayLCD(lcd, hysteresisText, hysteresis );
+  displayLCD_C();
+  hysteresis = setValue (up.isReleased(), down.isReleased(), hysteresis);
+  break;
+
+  case 3: 
+  displayLCD(lcd, checkTimeText, checkTime );
+  displayLCD_M();
+  checkTime = setValue (up.isReleased(), down.isReleased(), checkTime);
+  break;
+  
+    
+  };
+
 }
 
 
-bool debounce (int buttonPin){
-
-unsigned long timerNow = millis();
-unsigned long timerThen;
-bool debounce = false;
-
-  if (digitalRead(buttonPin) == LOW && debounce == false) {
-    debounce = true;
-    timerThen = millis();
-    };
-
-  if (digitalRead(buttonPin) == HIGH && debounce == true && timerNow - timerThen > 500) {
-    debounce = false;
-    return true; 
-     };
-  return false;
-  }
-
-
-void displayMenu ( LiquidCrystal_I2C lcd, String text, int value, int currentPage, int setPage ){
-  if  (currentPage == setPage) {
-
-      lcd.setCursor(0,0);
-      lcd.print(text);
-      lcd.setCursor(0,1);
-      lcd.print(value);
-        } 
+void displayLCD(LiquidCrystal_I2C lcd, String text, float value){
+    lcd.setCursor(0, 1);
+    lcd.print(text);
+    lcd.print(value, 1); 
+  };
+void displayLCD_C(){
+    lcd.print((char)223);
+    lcd.print("C");
+    lcd.print("     ");
+   };
+void displayLCD_M(){
+    lcd.print(" min");
+    lcd.print("     ");
   };
 
 
-void setValue (int buttonUp, int buttonDown, int value, int currentPage, int setPage) {
+float setValue (bool buttonUp, bool buttonDown, float value) {
+
+
+    if (buttonUp == true) {
+      return value = value + 0.5;
+    };
+
+    if (buttonDown == true) {
+      return value = value - 0.5;
+    };
   
-  if (digitalRead(buttonUp) == LOW) {
-    value=value + 0.5;
-    };
 
-  if (digitalRead(buttonDown) == LOW){
-    value = value - 0.5;
-    };
-    
-  };
+  return value;
+
+};
