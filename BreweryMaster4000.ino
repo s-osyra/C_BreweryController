@@ -14,12 +14,11 @@ const int relay1Output = 6;
 const int relay2Output = 7;
 const int readTemp = 8;
 
-float setTemp = 30.0;
+float setTemp = 18.0;
 float currentTemp = 0.0;
 float thermometerCalibration = 0.0;
-float hysteresis = 1.5;
+float hysteresis = 0.5;
 float trueTemp;
-float trueSetTemp;
 
 bool checkTemp = false;
 bool heater = false;
@@ -28,7 +27,8 @@ bool cooler = false;
 
 unsigned long timerThen = 0;
 unsigned long timerSensor = 0;
-unsigned long checkTime = 0.1;
+unsigned long checkTime = 5.0;
+unsigned long tempCheckTime = 5000;
 const long millisToMin = 60000;
 
 const String setTempText = "T.zadana: ";
@@ -61,7 +61,7 @@ void setup() {
   digitalWrite(relay1Output, HIGH);
   digitalWrite(relay2Output, HIGH);
 
-  Serial.begin(115200);
+  //Serial.begin(115200);
 
 
 
@@ -79,12 +79,12 @@ void loop() {
 
   trueTemp = (currentTemp + thermometerCalibration) ;
 
-  if (abs(millis() - timerSensor) > 5000) {
+  if (abs(millis() - timerSensor) > tempCheckTime) {
     timerSensor = millis();
     sensors.requestTemperatures();
     
   };
-  
+
 //  Serial.print("////////////////////////");
 //  Serial.print("\n");
 //  Serial.print("Timer: ");
