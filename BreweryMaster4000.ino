@@ -27,7 +27,7 @@ bool cooler = false;
 
 unsigned long timerThen = 0;
 unsigned long timerSensor = 0;
-unsigned long checkTime = 5.0;
+float checkTime = 5;
 unsigned long tempCheckTime = 5000;
 const long millisToMin = 60000;
 
@@ -98,15 +98,15 @@ void loop() {
   currentTemp = sensors.getTempCByIndex(0);
 
   
-  if (  (abs(millis() - timerThen) > 5000) && checkTemp == false ) {
+  if (  (abs(millis() - timerThen) > checkTime * millisToMin) && checkTemp == false ) {
     checkTemp = true;
 
-      if (currentTemp  < setTemp - hysteresis){
+      if (trueTemp  < setTemp - hysteresis){
       heater = true;
       cooler = false;
      }
 
-    else if ( (setTemp + hysteresis) < currentTemp ){
+    else if ( (setTemp + hysteresis) < trueTemp ){
       heater = false;
       cooler = true;
      }
@@ -163,7 +163,7 @@ switch (menuPage) {
   
   case 0:
   setTemp = setValue (up.isReleased(), down.isReleased(), setTemp);
-  displayLCD(lcd, currentTempText, currentTemp );
+  displayLCD(lcd, currentTempText, trueTemp );
   displayLCD_C();
   break;
 
@@ -183,6 +183,11 @@ switch (menuPage) {
   displayLCD(lcd, checkTimeText, checkTime );
   displayLCD_M();
   checkTime = setValue (up.isReleased(), down.isReleased(), checkTime);
+
+  if (checkTime <=0 ) {
+    checkTime = 0.1;
+    };
+  
   break;
   
     
@@ -211,11 +216,11 @@ float setValue (bool buttonUp, bool buttonDown, float value) {
 
 
     if (buttonUp == true) {
-      return value = value + 0.5;
+      return value = value + 0.1;
     };
 
     if (buttonDown == true) {
-      return value = value - 0.5;
+      return value = value - 0.1;
     };
   
 
